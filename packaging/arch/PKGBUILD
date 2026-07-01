@@ -1,4 +1,4 @@
-# Maintainer: Gadi Cohen <dragon@wastelands.net>
+# Maintainer: Gadi Cohen <dragon at wastelands dot net>
 
 pkgname=spdif-keepalive
 pkgver=0.1.0
@@ -7,7 +7,7 @@ pkgdesc='Keep S/PDIF optical audio outputs awake with barely perceptible PCM noi
 arch=('any')
 url='https://github.com/gadicc/spdif-keepalive'
 license=('MIT')
-depends=('python' 'pipewire' 'libpulse' 'systemd' 'util-linux')
+depends=('bash' 'python' 'pipewire' 'libpulse' 'systemd' 'util-linux')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 checkdepends=('python-pytest')
 install="${pkgname}.install"

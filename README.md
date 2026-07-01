@@ -30,7 +30,7 @@ The default effective amplitude is `4`, which is the current known-good value fo
 On Arch Linux, the relevant runtime packages are usually:
 
 ```bash
-sudo pacman -S python pipewire libpulse systemd
+sudo pacman -S bash python pipewire libpulse systemd
 ```
 
 ## Install from source
@@ -179,9 +179,10 @@ Manual publishing steps:
 
 1. create and push a GitHub tag, for example `v0.1.0`
 2. update the release archive checksum with `updpkgsums`
-3. run `makepkg --printsrcinfo > .SRCINFO`
-4. test with `makepkg -si`
-5. commit `PKGBUILD` and `.SRCINFO` to the AUR Git repository
+3. verify `sha256sums` is no longer `SKIP`
+4. run `makepkg --printsrcinfo > .SRCINFO`
+5. test with `makepkg -si`
+6. commit `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to the AUR Git repository
 
 The package installs:
 
@@ -190,20 +191,32 @@ The package installs:
 - `/usr/lib/systemd/system-sleep/spdif-keepalive`
 - documentation under `/usr/share/doc/spdif-keepalive`
 
-### Automated AUR publishing
+### Automated validation and AUR publishing
 
-The repository includes a GitHub Actions workflow that can publish to AUR on every push to `main`.
+The repository includes a GitHub Actions workflow that validates the package on every push and pull request, and publishes to AUR on pushes to `main`.
 
-The workflow uses `pyproject.toml` as the version source of truth. On a push to `main`, it:
+The validation job does not need a release tag. It:
 
 1. reads `project.version`
 2. verifies `packaging/arch/PKGBUILD` has the same `pkgver`
-3. creates tag `v${version}` if it does not already exist
-4. generates `sha256sums` and `.SRCINFO`
-5. builds the Arch package in an Arch Linux container
-6. pushes `PKGBUILD`, `.SRCINFO`, and `spdif-keepalive.install` to AUR
+3. runs the Python tests
+4. byte-compiles the Python package
+5. checks the system sleep hook with `bash -n`
+6. builds a wheel
+7. builds the Arch package in an Arch Linux container from a local `git archive`
+8. runs `namcap` on the temporary `PKGBUILD` and built package
+
+The publish job runs only after validation passes. It:
+
+1. creates tag `v${version}` if it does not already exist
+2. generates release `sha256sums` and `.SRCINFO`
+3. builds the Arch package from the GitHub release archive
+4. runs `namcap`
+5. pushes `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to AUR
 
 That means a push to `main` is a release. For later changes, bump both `pyproject.toml` and `packaging/arch/PKGBUILD` before pushing to `main`. If `v${version}` already exists at a different commit, the workflow fails instead of moving the tag.
+
+To test without creating a tag, push a branch or open a pull request. You can also run the workflow manually with `publish` left unchecked.
 
 Required GitHub repository setup:
 
@@ -212,6 +225,33 @@ Required GitHub repository setup:
 3. add the private key as a GitHub Actions secret named `AUR_SSH_PRIVATE_KEY`
 
 If the AUR secret is missing, the workflow still creates the GitHub tag and validates the package, but skips the AUR push. You can rerun it later with `workflow_dispatch`.
+
+Create a dedicated AUR key for GitHub Actions:
+
+```bash
+ssh-keygen -t ed25519 \
+  -C "aur-spdif-keepalive-github-actions" \
+  -f ~/.ssh/aur_spdif_keepalive \
+  -N ""
+```
+
+Add the public key to your AUR account:
+
+```bash
+cat ~/.ssh/aur_spdif_keepalive.pub
+```
+
+Then add the private key as a GitHub Actions secret:
+
+```bash
+gh secret set AUR_SSH_PRIVATE_KEY < ~/.ssh/aur_spdif_keepalive
+```
+
+Useful links:
+
+- AUR account: <https://aur.archlinux.org/account/>
+- AUR submission guidelines: <https://wiki.archlinux.org/title/AUR_submission_guidelines>
+- GitHub Actions secrets: <https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets>
 
 ## Development
 
