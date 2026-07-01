@@ -1,0 +1,15 @@
+[Unit]
+Description=Keep S/PDIF optical output awake
+After=pipewire.service wireplumber.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/spdif-keepalive/env
+ExecStart=/usr/bin/spdif-keepalive
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target

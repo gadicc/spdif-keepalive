@@ -1,0 +1,39 @@
+# Maintainer: REPLACE_ME <REPLACE_ME@example.com>
+
+pkgname=spdif-keepalive
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Keep S/PDIF optical audio outputs awake with barely perceptible PCM noise'
+arch=('any')
+url='https://github.com/REPLACE_ME/spdif-keepalive'
+license=('MIT')
+depends=('python' 'pipewire' 'libpulse' 'systemd' 'util-linux')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+checkdepends=('python-pytest')
+install="${pkgname}.install"
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "${pkgname}-${pkgver}"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "${pkgname}-${pkgver}"
+  PYTHONPATH=src pytest
+}
+
+package() {
+  cd "${pkgname}-${pkgver}"
+
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 systemd/spdif-keepalive.service \
+    "$pkgdir/usr/lib/systemd/user/spdif-keepalive.service"
+  install -Dm755 systemd/spdif-keepalive-sleep \
+    "$pkgdir/usr/lib/systemd/system-sleep/spdif-keepalive"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 examples/config.toml "$pkgdir/usr/share/doc/$pkgname/config.toml"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

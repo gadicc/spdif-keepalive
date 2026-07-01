@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE_NAME="spdif-keepalive.service"
+STATE_DIR="/run/spdif-keepalive"
+STATE_FILE="$STATE_DIR/active-users"
+RESUME_DELAY_SECONDS="${SPDIF_KEEPALIVE_RESUME_DELAY_SECONDS:-3}"
+
+run_user_systemctl() {
+  local uid="$1"
+  shift
+
+  local entry user
+  entry="$(getent passwd "$uid" || true)"
+  user="${entry%%:*}"
+
+  if [[ -z "$user" ]]; then
+    return 1
+  fi
+
+  runuser -u "$user" -- \
+    env "XDG_RUNTIME_DIR=/run/user/$uid" \
+    systemctl --user "$@"
+}
+
+record_active_users_and_stop() {
+  mkdir -p "$STATE_DIR"
+  : >"$STATE_FILE"
+
+  local runtime_dir uid
+  for runtime_dir in /run/user/[0-9]*; do
+    [[ -d "$runtime_dir" ]] || continue
+    uid="${runtime_dir##*/}"
+
+    if run_user_systemctl "$uid" is-active --quiet "$SERVICE_NAME"; then
+      printf '%s\n' "$uid" >>"$STATE_FILE"
+      run_user_systemctl "$uid" stop "$SERVICE_NAME" || true
+    fi
+  done
+}
+
+restart_previously_active_users() {
+  [[ -f "$STATE_FILE" ]] || return 0
+
+  sleep "$RESUME_DELAY_SECONDS"
+
+  local uid
+  while IFS= read -r uid; do
+    [[ -n "$uid" ]] || continue
+    [[ -d "/run/user/$uid" ]] || continue
+    run_user_systemctl "$uid" restart "$SERVICE_NAME" || true
+  done <"$STATE_FILE"
+
+  rm -f "$STATE_FILE"
+}
+
+case "${1-}/${2-}" in
+  pre/*)
+    record_active_users_and_stop
+    ;;
+  post/*)
+    restart_previously_active_users
+    ;;
+esac

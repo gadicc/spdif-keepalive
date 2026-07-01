@@ -1,0 +1,21 @@
+# Copy to ~/.config/spdif-keepalive/config.toml and edit as needed.
+
+# If omitted, spdif-keepalive autodetects a sink whose name looks digital,
+# such as one containing "iec958", "spdif", "toslink", or "digital".
+# target = "alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo"
+
+# You can loosen or tighten autodetection without pinning a full sink name.
+# target_regex = "iec958|USB_SPDIF|Leviathan"
+
+# Desired post-volume s16 amplitude. 4 is the current known-good default for
+# a Cubilux USB-C to TOSLINK adapter feeding a Razer Leviathan optical input.
+effective_amp = 4
+
+# Safety rails for generated amplitude before the sink/master volume is applied.
+min_amp = 1
+max_amp = 512
+
+rate = 48000
+channels = 2
+chunk_seconds = 0.10
+volume_check_seconds = 1.0
