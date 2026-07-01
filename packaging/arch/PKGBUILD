@@ -1,11 +1,11 @@
-# Maintainer: REPLACE_ME <REPLACE_ME@example.com>
+# Maintainer: Gadi Cohen <dragon@wastelands.net>
 
 pkgname=spdif-keepalive
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='Keep S/PDIF optical audio outputs awake with barely perceptible PCM noise'
 arch=('any')
-url='https://github.com/REPLACE_ME/spdif-keepalive'
+url='https://github.com/gadicc/spdif-keepalive'
 license=('MIT')
 depends=('python' 'pipewire' 'libpulse' 'systemd' 'util-linux')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
@@ -35,5 +35,5 @@ package() {
     "$pkgdir/usr/lib/systemd/system-sleep/spdif-keepalive"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
   install -Dm644 examples/config.toml "$pkgdir/usr/share/doc/$pkgname/config.toml"
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

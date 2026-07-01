@@ -177,11 +177,11 @@ packaging/arch/PKGBUILD
 
 Before publishing to AUR:
 
-1. replace `REPLACE_ME` in the package URL
-2. create and push a GitHub tag, for example `v0.1.0`
-3. replace `sha256sums=('SKIP')` with the real source archive checksum
-4. run `makepkg --printsrcinfo > .SRCINFO`
-5. test with `makepkg -si`
+1. create and push a GitHub tag, for example `v0.1.0`
+2. update the release archive checksum with `updpkgsums`
+3. run `makepkg --printsrcinfo > .SRCINFO`
+4. test with `makepkg -si`
+5. commit `PKGBUILD` and `.SRCINFO` to the AUR Git repository
 
 The package installs:
 
