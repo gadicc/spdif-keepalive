@@ -4,4 +4,9 @@
 /src/*.egg-info/
 /src/**/__pycache__/
 /tests/**/__pycache__/
+/packaging/arch/.SRCINFO
+/packaging/arch/pkg/
+/packaging/arch/src/
+/packaging/arch/*.pkg.tar.*
+/packaging/arch/*.tar.gz
 *.py[cod]

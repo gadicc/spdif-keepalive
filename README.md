@@ -175,7 +175,7 @@ An Arch packaging template lives in:
 packaging/arch/PKGBUILD
 ```
 
-Before publishing to AUR:
+Manual publishing steps:
 
 1. create and push a GitHub tag, for example `v0.1.0`
 2. update the release archive checksum with `updpkgsums`
@@ -189,6 +189,29 @@ The package installs:
 - `/usr/lib/systemd/user/spdif-keepalive.service`
 - `/usr/lib/systemd/system-sleep/spdif-keepalive`
 - documentation under `/usr/share/doc/spdif-keepalive`
+
+### Automated AUR publishing
+
+The repository includes a GitHub Actions workflow that can publish to AUR on every push to `main`.
+
+The workflow uses `pyproject.toml` as the version source of truth. On a push to `main`, it:
+
+1. reads `project.version`
+2. verifies `packaging/arch/PKGBUILD` has the same `pkgver`
+3. creates tag `v${version}` if it does not already exist
+4. generates `sha256sums` and `.SRCINFO`
+5. builds the Arch package in an Arch Linux container
+6. pushes `PKGBUILD`, `.SRCINFO`, and `spdif-keepalive.install` to AUR
+
+That means a push to `main` is a release. For later changes, bump both `pyproject.toml` and `packaging/arch/PKGBUILD` before pushing to `main`. If `v${version}` already exists at a different commit, the workflow fails instead of moving the tag.
+
+Required GitHub repository setup:
+
+1. set Actions workflow permissions to allow `Read and write permissions`
+2. create a passphrase-less AUR SSH key and add the public key to your AUR account
+3. add the private key as a GitHub Actions secret named `AUR_SSH_PRIVATE_KEY`
+
+If the AUR secret is missing, the workflow still creates the GitHub tag and validates the package, but skips the AUR push. You can rerun it later with `workflow_dispatch`.
 
 ## Development
 

@@ -1,0 +1,168 @@
+name: Publish AUR
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-aur
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish AUR package
+    runs-on: ubuntu-latest
+    if: github.repository == 'gadicc/spdif-keepalive'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read project version
+        id: project
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: Validate PKGBUILD version
+        run: |
+          source packaging/arch/PKGBUILD
+
+          if [[ "${pkgver}" != "${{ steps.project.outputs.version }}" ]]; then
+            echo "::error::PKGBUILD pkgver=${pkgver}, but pyproject.toml version=${{ steps.project.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Create release tag if needed
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.project.outputs.tag }}"
+          git fetch --tags origin
+
+          if git rev-parse --verify --quiet "${tag}" >/dev/null; then
+            tagged_commit="$(git rev-list -n 1 "${tag}")"
+
+            if [[ "${tagged_commit}" != "${GITHUB_SHA}" ]]; then
+              echo "::error::${tag} already exists at ${tagged_commit}; bump pyproject.toml and PKGBUILD before publishing this commit."
+              exit 1
+            fi
+
+            echo "${tag} already points at this commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "spdif-keepalive ${{ steps.project.outputs.version }}" "${GITHUB_SHA}"
+          git push origin "${tag}"
+
+      - name: Build AUR package files
+        run: |
+          set -euo pipefail
+
+          host_uid="$(id -u)"
+          host_gid="$(id -g)"
+
+          docker run --rm \
+            -e "HOST_UID=${host_uid}" \
+            -e "HOST_GID=${host_gid}" \
+            -v "${PWD}:/workspace" \
+            -w /workspace \
+            archlinux:base-devel \
+            bash -lc '
+              set -euo pipefail
+
+              pacman -Syu --noconfirm \
+                git \
+                libpulse \
+                pacman-contrib \
+                pipewire \
+                python \
+                python-build \
+                python-installer \
+                python-pytest \
+                python-setuptools \
+                python-wheel \
+                systemd \
+                util-linux
+
+              if ! getent group "${HOST_GID}" >/dev/null; then
+                groupadd -g "${HOST_GID}" builder
+              fi
+
+              useradd -m -u "${HOST_UID}" -g "${HOST_GID}" builder
+              chown -R builder:"${HOST_GID}" /workspace/packaging/arch
+
+              runuser -u builder -- bash -lc "
+                set -euo pipefail
+                cd /workspace/packaging/arch
+                updpkgsums
+                makepkg --printsrcinfo > .SRCINFO
+                makepkg --clean --cleanbuild --force --noconfirm
+              "
+            '
+
+      - name: Check AUR SSH secret
+        id: aur
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -n "${AUR_SSH_PRIVATE_KEY}" ]]; then
+            echo "configured=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "configured=false" >>"${GITHUB_OUTPUT}"
+            echo "::warning::AUR_SSH_PRIVATE_KEY is not configured; generated AUR files, but skipped publishing."
+          fi
+
+      - name: Configure AUR SSH
+        if: steps.aur.outputs.configured == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          install -m 700 -d "${HOME}/.ssh"
+          printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" >"${HOME}/.ssh/aur"
+          chmod 600 "${HOME}/.ssh/aur"
+          ssh-keyscan aur.archlinux.org >>"${HOME}/.ssh/known_hosts"
+
+          {
+            echo "Host aur.archlinux.org"
+            echo "  HostName aur.archlinux.org"
+            echo "  User aur"
+            echo "  IdentityFile ~/.ssh/aur"
+            echo "  IdentitiesOnly yes"
+          } >"${HOME}/.ssh/config"
+
+      - name: Publish to AUR
+        if: steps.aur.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+
+          git clone ssh://aur@aur.archlinux.org/spdif-keepalive.git aur-package
+          cp packaging/arch/PKGBUILD aur-package/PKGBUILD
+          cp packaging/arch/.SRCINFO aur-package/.SRCINFO
+          cp packaging/arch/spdif-keepalive.install aur-package/spdif-keepalive.install
+
+          cd aur-package
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO spdif-keepalive.install
+
+          if git diff --cached --quiet; then
+            echo "AUR package is already up to date."
+            exit 0
+          fi
+
+          git commit -m "Update to ${{ steps.project.outputs.version }}"
+          git push
