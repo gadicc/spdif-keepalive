@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install_package=0
+cleanup=0
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/test-aur-package [--install] [--cleanup]
+
+Build and test the Arch package from the current working tree without requiring
+a GitHub release tag and without writing build artifacts into the repository.
+
+Options:
+  --install   Install the built package with sudo pacman -U after checks pass.
+  --cleanup   Remove the temporary build directory before exiting.
+  -h, --help  Show this help.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install)
+      install_package=1
+      ;;
+    --cleanup)
+      cleanup=1
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+repo_root="$(git rev-parse --show-toplevel)"
+version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+workdir="$(mktemp -d "${TMPDIR:-/tmp}/spdif-keepalive-aur.XXXXXX")"
+srcdir="$workdir/spdif-keepalive-$version"
+archive="spdif-keepalive-$version.tar.gz"
+
+if [[ "$cleanup" -eq 1 ]]; then
+  trap 'rm -rf "$workdir"' EXIT
+fi
+
+mkdir -p "$srcdir"
+
+copy_worktree() {
+  cd "$repo_root"
+  git ls-files -co --exclude-standard -z |
+    while IFS= read -r -d '' path; do
+      [[ -e "$path" ]] && printf '%s\0' "$path"
+    done |
+    tar --null -T - -cf - |
+    tar -xf - -C "$srcdir"
+}
+
+copy_worktree
+
+(
+  cd "$workdir"
+  tar -cf - "spdif-keepalive-$version" | gzip -n >"$archive"
+  cp "$srcdir/packaging/arch/PKGBUILD" .
+  cp "$srcdir/packaging/arch/LICENSE" .
+  cp "$srcdir/packaging/arch/spdif-keepalive.install" .
+
+  sed -i 's#^source=.*#source=("${pkgname}-${pkgver}.tar.gz")#' PKGBUILD
+  checksum="$(sha256sum "$archive" | cut -d " " -f 1)"
+  sed -i "s#^sha256sums=.*#sha256sums=('${checksum}')#" PKGBUILD
+
+  makepkg --printsrcinfo >.SRCINFO
+  makepkg --clean --cleanbuild --force --syncdeps --noconfirm
+  namcap PKGBUILD
+  namcap ./*.pkg.tar.*
+)
+
+package_file="$(find "$workdir" -maxdepth 1 -type f -name '*.pkg.tar.*' | sort | tail -n 1)"
+
+if [[ -z "$package_file" ]]; then
+  echo "package build did not produce a package file" >&2
+  exit 1
+fi
+
+if [[ "$install_package" -eq 1 ]]; then
+  echo "package built: $package_file"
+  sudo pacman -U "$package_file"
+  echo "installed: $package_file"
+fi
+
+if [[ "$cleanup" -eq 0 ]]; then
+  echo "package built: $package_file"
+  echo "temporary build directory: $workdir"
+else
+  echo "package built successfully"
+  echo "temporary build directory will be removed"
+fi

@@ -6,6 +6,17 @@ Some optical audio chains treat near-silence as inactivity. In this setup, a Raz
 
 This tool avoids that by continuously sending barely perceptible stereo PCM noise that is loud enough to defeat the silence detector, but quiet enough to stay out of the way.
 
+## Contents
+
+- [How it works](#how-it-works)
+- [Installation](#installation)
+  - [Arch Linux and AUR](#arch-linux-and-aur)
+  - [From Source](#from-source)
+- [Configuration](#configuration)
+  - [Environment overrides](#environment-overrides)
+  - [Suspend and resume](#suspend-and-resume)
+- [Development](#development)
+
 ## How it works
 
 `spdif-keepalive`:
@@ -18,7 +29,48 @@ This tool avoids that by continuously sending barely perceptible stereo PCM nois
 
 The default effective amplitude is `4`, which is the current known-good value for the original Cubilux USB-C to TOSLINK adapter and Razer Leviathan optical input setup.
 
-## Requirements
+## Installation
+
+- [Arch Linux and AUR](#arch-linux-and-aur)
+- [From Source](#from-source)
+
+### Arch Linux and AUR
+
+Install from the AUR with your preferred helper:
+
+```bash
+yay -S spdif-keepalive
+```
+
+or:
+
+```bash
+paru -S spdif-keepalive
+```
+
+The AUR package declares the required runtime dependencies and installs:
+
+- `/usr/bin/spdif-keepalive`
+- `/usr/lib/systemd/user/spdif-keepalive.service`
+- `/usr/lib/systemd/system-sleep/spdif-keepalive`
+- documentation under `/usr/share/doc/spdif-keepalive`
+
+Then enable the user service:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now spdif-keepalive.service
+```
+
+Check logs with:
+
+```bash
+journalctl --user -u spdif-keepalive.service -f
+```
+
+### From Source
+
+For source installs, install the runtime requirements yourself:
 
 - Linux
 - systemd user services
@@ -33,7 +85,7 @@ On Arch Linux, the relevant runtime packages are usually:
 sudo pacman -S bash python pipewire libpulse systemd
 ```
 
-## Install from source
+Install the Python package:
 
 ```bash
 python -m pip install .
@@ -117,7 +169,7 @@ Configuration precedence is:
 3. environment variables
 4. command-line flags
 
-## Environment overrides
+### Environment overrides
 
 The systemd unit loads this optional file:
 
@@ -148,128 +200,42 @@ Supported environment variables:
 - `SPDIF_KEEPALIVE_PW_CAT`
 - `SPDIF_KEEPALIVE_PACTL`
 
-## Suspend and resume
+### Suspend and resume
 
-The optional system sleep hook stops active `spdif-keepalive.service` instances before suspend and restarts only those same instances after resume. This keeps `pw-cat` from writing into a disappearing USB or dock audio device.
+The package installs a system sleep hook at:
+
+```text
+/usr/lib/systemd/system-sleep/spdif-keepalive
+```
+
+systemd runs executable hooks in that directory automatically around suspend and resume. There is no separate `systemctl enable` step for the hook itself; once installed, it is active by default.
+
+The hook stops active `spdif-keepalive.service` instances before suspend and restarts only those same instances after resume. This keeps `pw-cat` from writing into a disappearing USB or dock audio device.
 
 The hook is generic: it does not hardcode a username.
 
-The post-resume delay defaults to 3 seconds. Override it for the system hook with:
+To opt out of the sleep hook, set `SPDIF_KEEPALIVE_SLEEP_HOOK_ENABLED=0` in the relevant system sleep unit environment. For suspend:
 
 ```bash
 sudo systemctl edit systemd-suspend.service
 ```
 
-Then add an environment override if needed:
+For hibernate or suspend-then-hibernate, apply the same override to the matching systemd sleep unit.
+
+Then add:
+
+```ini
+[Service]
+Environment=SPDIF_KEEPALIVE_SLEEP_HOOK_ENABLED=0
+```
+
+The post-resume delay defaults to 3 seconds. Use the same drop-in mechanism to override it:
 
 ```ini
 [Service]
 Environment=SPDIF_KEEPALIVE_RESUME_DELAY_SECONDS=5
 ```
 
-## Arch Linux and AUR
-
-An Arch packaging template lives in:
-
-```text
-packaging/arch/PKGBUILD
-```
-
-Manual publishing steps:
-
-1. create and push a GitHub tag, for example `v0.1.0`
-2. update the release archive checksum with `updpkgsums`
-3. verify `sha256sums` is no longer `SKIP`
-4. run `makepkg --printsrcinfo > .SRCINFO`
-5. test with `makepkg -si`
-6. commit `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to the AUR Git repository
-
-The package installs:
-
-- `/usr/bin/spdif-keepalive`
-- `/usr/lib/systemd/user/spdif-keepalive.service`
-- `/usr/lib/systemd/system-sleep/spdif-keepalive`
-- documentation under `/usr/share/doc/spdif-keepalive`
-
-### Automated validation and AUR publishing
-
-The repository includes a GitHub Actions workflow that validates the package on every push and pull request, and publishes to AUR on pushes to `main`.
-
-The validation job does not need a release tag. It:
-
-1. reads `project.version`
-2. verifies `packaging/arch/PKGBUILD` has the same `pkgver`
-3. runs the Python tests
-4. byte-compiles the Python package
-5. checks the system sleep hook with `bash -n`
-6. builds a wheel
-7. builds the Arch package in an Arch Linux container from a local `git archive`
-8. runs `namcap` on the temporary `PKGBUILD` and built package
-
-The publish job runs only after validation passes. It:
-
-1. creates tag `v${version}` if it does not already exist
-2. generates release `sha256sums` and `.SRCINFO`
-3. builds the Arch package from the GitHub release archive
-4. runs `namcap`
-5. pushes `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to AUR
-
-That means a push to `main` is a release. For later changes, bump both `pyproject.toml` and `packaging/arch/PKGBUILD` before pushing to `main`. If `v${version}` already exists at a different commit, the workflow fails instead of moving the tag.
-
-To test without creating a tag, push a branch or open a pull request. You can also run the workflow manually with `publish` left unchecked.
-
-Required GitHub repository setup:
-
-1. set Actions workflow permissions to allow `Read and write permissions`
-2. create a passphrase-less AUR SSH key and add the public key to your AUR account
-3. add the private key as a GitHub Actions secret named `AUR_SSH_PRIVATE_KEY`
-
-If the AUR secret is missing, the workflow still creates the GitHub tag and validates the package, but skips the AUR push. You can rerun it later with `workflow_dispatch`.
-
-Create a dedicated AUR key for GitHub Actions:
-
-```bash
-ssh-keygen -t ed25519 \
-  -C "aur-spdif-keepalive-github-actions" \
-  -f ~/.ssh/aur_spdif_keepalive \
-  -N ""
-```
-
-Add the public key to your AUR account:
-
-```bash
-cat ~/.ssh/aur_spdif_keepalive.pub
-```
-
-Then add the private key as a GitHub Actions secret:
-
-```bash
-gh secret set AUR_SSH_PRIVATE_KEY < ~/.ssh/aur_spdif_keepalive
-```
-
-Useful links:
-
-- AUR account: <https://aur.archlinux.org/account/>
-- AUR submission guidelines: <https://wiki.archlinux.org/title/AUR_submission_guidelines>
-- GitHub Actions secrets: <https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets>
-
 ## Development
 
-Run tests:
-
-```bash
-pytest
-```
-
-Run locally without installing:
-
-```bash
-PYTHONPATH=src python -m spdif_keepalive.cli --print-config
-PYTHONPATH=src python -m spdif_keepalive.cli --list-sinks
-```
-
-Run the keepalive stream directly:
-
-```bash
-PYTHONPATH=src python -m spdif_keepalive.cli -v
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks, local Arch package builds, release workflow, and AUR publishing notes.

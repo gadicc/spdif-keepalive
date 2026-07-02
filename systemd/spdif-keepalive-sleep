@@ -4,7 +4,14 @@ set -euo pipefail
 SERVICE_NAME="spdif-keepalive.service"
 STATE_DIR="/run/spdif-keepalive"
 STATE_FILE="$STATE_DIR/active-users"
+SLEEP_HOOK_ENABLED="${SPDIF_KEEPALIVE_SLEEP_HOOK_ENABLED:-1}"
 RESUME_DELAY_SECONDS="${SPDIF_KEEPALIVE_RESUME_DELAY_SECONDS:-3}"
+
+case "${SLEEP_HOOK_ENABLED,,}" in
+  0 | false | no | off)
+    exit 0
+    ;;
+esac
 
 run_user_systemctl() {
   local uid="$1"

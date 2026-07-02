@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: scripts/bump-version X.Y.Z" >&2
+  exit 2
+fi
+
+version="$1"
+
+if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([a-zA-Z0-9.+_]+)?$ ]]; then
+  echo "version should look like X.Y.Z, optionally with a suffix" >&2
+  exit 2
+fi
+
+python - "$version" <<'PY'
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+version = sys.argv[1]
+
+replacements = {
+    Path("pyproject.toml"): (
+        re.compile(r'(?m)^version = "[^"]+"$'),
+        f'version = "{version}"',
+    ),
+    Path("packaging/arch/PKGBUILD"): (
+        re.compile(r"(?m)^pkgver=.*$"),
+        f"pkgver={version}",
+    ),
+}
+
+for path, (pattern, replacement) in replacements.items():
+    text = path.read_text(encoding="utf-8")
+    new_text, count = pattern.subn(replacement, text, count=1)
+    if count != 1:
+        raise SystemExit(f"could not update {path}")
+    path.write_text(new_text, encoding="utf-8")
+PY
+
+echo "updated version to $version in pyproject.toml and packaging/arch/PKGBUILD"
