@@ -49,6 +49,15 @@ jobs:
             exit 1
           fi
 
+      - name: Validate package module version
+        run: |
+          module_version="$(python3 -c 'import ast; tree = ast.parse(open("src/spdif_keepalive/__init__.py").read()); print(next(node.value.value for node in tree.body if isinstance(node, ast.Assign) and any(getattr(target, "id", None) == "__version__" for target in node.targets)))')"
+
+          if [[ "${module_version}" != "${{ steps.project.outputs.version }}" ]]; then
+            echo "::error::src/spdif_keepalive/__init__.py __version__=${module_version}, but pyproject.toml version=${{ steps.project.outputs.version }}"
+            exit 1
+          fi
+
       - name: Run Python checks
         run: |
           set -euo pipefail
@@ -224,7 +233,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          git clone ssh://aur@aur.archlinux.org/spdif-keepalive.git aur-package
+          aur_url="ssh://aur@aur.archlinux.org/spdif-keepalive.git"
+
+          if git clone "${aur_url}" aur-package; then
+            echo "Cloned existing AUR package repository."
+          else
+            echo "AUR package repository is not cloneable yet; preparing initial package push."
+            rm -rf aur-package
+            mkdir aur-package
+            git -C aur-package init --initial-branch=master
+            git -C aur-package remote add origin "${aur_url}"
+          fi
+
           cp packaging/arch/PKGBUILD aur-package/PKGBUILD
           cp packaging/arch/.SRCINFO aur-package/.SRCINFO
           cp packaging/arch/LICENSE aur-package/LICENSE
@@ -241,4 +261,4 @@ jobs:
           fi
 
           git commit -m "Update to ${{ needs.validate.outputs.version }}"
-          git push
+          git push origin HEAD:master

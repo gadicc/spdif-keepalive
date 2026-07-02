@@ -84,9 +84,9 @@ systemctl --user stop spdif-keepalive.service
 
 ## Versioning
 
-`pyproject.toml` and `packaging/arch/PKGBUILD` must use the same version.
+`pyproject.toml`, `src/spdif_keepalive/__init__.py`, and `packaging/arch/PKGBUILD` must use the same version.
 
-Use the helper script to bump both files:
+Use the helper script to bump all three files:
 
 ```bash
 scripts/bump-version 0.1.1
@@ -96,6 +96,8 @@ Commit the version bump with the change it releases. The GitHub Actions workflow
 
 The workflow does not auto-bump versions. Keeping the version bump in a normal commit makes releases reviewable and avoids CI committing back to `main`, retriggering itself, or tagging a commit you did not explicitly push.
 
+For Arch packaging-only changes where the upstream source version is unchanged, keep `pkgver` as-is and bump `pkgrel` in `packaging/arch/PKGBUILD` instead. Reset `pkgrel` to `1` whenever `pkgver` changes.
+
 ## GitHub Actions
 
 The repository includes a workflow at `.github/workflows/publish-aur.yml`.
@@ -104,12 +106,13 @@ The `validate` job runs on every push, pull request, and manual dispatch. It doe
 
 1. reads `project.version`
 2. verifies `packaging/arch/PKGBUILD` has the same `pkgver`
-3. runs the Python tests
-4. byte-compiles the Python package
-5. checks the system sleep hook with `bash -n`
-6. builds a wheel
-7. builds the Arch package in an Arch Linux container from a local `git archive`
-8. runs `namcap` on the temporary `PKGBUILD` and built package
+3. verifies `src/spdif_keepalive/__init__.py` has the same `__version__`
+4. runs the Python tests
+5. byte-compiles the Python package
+6. checks the system sleep hook with `bash -n`
+7. builds a wheel
+8. builds the Arch package in an Arch Linux container from a local `git archive`
+9. runs `namcap` on the temporary `PKGBUILD` and built package
 
 The `publish-aur` job runs only after validation passes and only on `main`. It:
 
@@ -117,7 +120,7 @@ The `publish-aur` job runs only after validation passes and only on `main`. It:
 2. generates release `sha256sums` and `.SRCINFO`
 3. builds the Arch package from the GitHub release archive
 4. runs `namcap`
-5. pushes `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to AUR
+5. pushes `PKGBUILD`, `.SRCINFO`, `LICENSE`, and `spdif-keepalive.install` to AUR, creating the AUR package repository on first publish if needed
 
 That means a push to `main` is a release. To test without creating a tag, push a branch, open a pull request, or run the workflow manually with `publish` left unchecked.
 

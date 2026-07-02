@@ -27,6 +27,10 @@ replacements = {
         re.compile(r'(?m)^version = "[^"]+"$'),
         f'version = "{version}"',
     ),
+    Path("src/spdif_keepalive/__init__.py"): (
+        re.compile(r'(?m)^__version__ = "[^"]+"$'),
+        f'__version__ = "{version}"',
+    ),
     Path("packaging/arch/PKGBUILD"): (
         re.compile(r"(?m)^pkgver=.*$"),
         f"pkgver={version}",
@@ -41,4 +45,4 @@ for path, (pattern, replacement) in replacements.items():
     path.write_text(new_text, encoding="utf-8")
 PY
 
-echo "updated version to $version in pyproject.toml and packaging/arch/PKGBUILD"
+echo "updated version to $version in pyproject.toml, src/spdif_keepalive/__init__.py, and packaging/arch/PKGBUILD"
