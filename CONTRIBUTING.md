@@ -5,7 +5,7 @@
 On Arch Linux, install the tools used by the local checks and package build:
 
 ```bash
-sudo pacman -S base-devel namcap python-build python-pytest
+sudo pacman -S base-devel namcap python-build python-packaging python-pytest
 ```
 
 `makepkg` is Arch-specific. On other distributions, rely on the GitHub Actions validation job or run the Arch package test in an Arch container.

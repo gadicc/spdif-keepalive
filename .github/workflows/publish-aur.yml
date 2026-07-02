@@ -62,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 -m pip install --user build pytest "setuptools>=77" wheel
+          python3 -m pip install --user --upgrade build "packaging>=24.2" pytest "setuptools>=77" wheel
           PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src pytest -q -p no:cacheprovider
           python3 -m compileall -q src
           python3 -m build --wheel --no-isolation --outdir /tmp/spdif-keepalive-dist
